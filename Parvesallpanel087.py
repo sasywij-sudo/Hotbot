@@ -29,7 +29,7 @@ class ServerDownError(Exception):
 # === MULTI-BOT SYSTEM ===
 # =====================================================
 BOT_TOKENS = [
-    "7043806851:AAG8_PlGLikGu_XpNDe8GJx59WkVZhNwvks",
+    "8687850571:AAHe5l7q0CFgxMVYVeS8AFJnFDkfT2TPkq8",
 ]
 BOT_TOKENS = [t for t in BOT_TOKENS if t and t.strip()]
 
