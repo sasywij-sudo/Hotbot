@@ -1,4 +1,4 @@
-import requests
+id                import requests
 import logging
 import json
 import os
@@ -29,12 +29,12 @@ class ServerDownError(Exception):
 # === MULTI-BOT SYSTEM ===
 # =====================================================
 BOT_TOKENS = [
-    "8778461066:AAEkgGOwUAZjRa6zlccrEOyi0TNCmMZ__Qc",
+    "7043806851:AAG8_PlGLikGu_XpNDe8GJx59WkVZhNwvks",
 ]
 BOT_TOKENS = [t for t in BOT_TOKENS if t and t.strip()]
 
 CHAT_IDS = [
-    '-1002855982756',
+    '--1003839684911',
 ]
 CHAT_IDS = [c for c in CHAT_IDS if c and c.strip()]
 
@@ -42,53 +42,14 @@ CHAT_IDS = [c for c in CHAT_IDS if c and c.strip()]
 # === LOGIN-BASED PORTALS ===
 # =====================================================
 PORTALS = [
-    {
-        "name": "Panel1",
-        "url": "http://185.2.83.39",
-        "username": "Dipto2025",
-        "password": "Dipto2025",
-    },
-    {
-        "name": "Panel2",
-        "url": "http://54.36.173.235",
-        "username": "Dipto2025",
-        "password": "Dipto2025",
-    },
-    {
-        "name": "Panel3",
-        "url": "http://45.14.135.150",
-        "username": "weareallone",
-        "password": "Weareall@2025one",
-    },
-    {
-        "name": "Panel4",
-        "url": "http://145.239.130.45",
-        "username": "Dipto2025",
-        "password": "112233",
-    },
-    {
-        "name": "Panel5",
-        "url": "http://54.39.104.241",
-        "username": "Dipto2025",
-        "password": "Dipto2025",
-    },
+    # এখানে নতুন panel add করো
 ]
 
 # =====================================================
 # === API-BASED PORTALS ===
 # =====================================================
 API_PORTALS = [
-    {
-        "name": "Panel6",
-        "url": "http://147.135.212.197/crapi/st/viewstats",
-        "token": "SU5TQjRSQlhfiGFnaWZ4dFWLdoV0jXB8fWuRhFlVeHhyiFdWRY5s",
-        "type": "viewstats",
-        "records": 10,
-        "col_date": 3,
-        "col_number": 1,
-        "col_service": 0,
-        "col_message": 2,
-    },
+    # এখানে নতুন API panel add করো
 ]
 
 # =====================================================
@@ -329,6 +290,63 @@ def load_already_sent() -> set:
         except Exception as e:
             logging.warning(f"already_sent load error (fresh start): {e}")
     return set()
+
+
+# =====================================================
+# === ACTIVE NUMBER → USER MAPPING (varson3 shared file) ===
+# =====================================================
+# varson3 saves active number assignments to data/active_numbers.json
+# relative to its own folder. Since both scripts live in the same dir,
+# we read the same file to route OTP directly to the correct Telegram user.
+
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+ACTIVE_NUMBERS_FILE = os.path.join(_SCRIPT_DIR, "data", "active_numbers.json")
+
+# varson3's bot token — used to deliver OTP to the specific user
+VARSON3_BOT_TOKEN = "7908883848:AAE-_Hs8l9QEQoXlEr7eeDpal2acck7DHt4"
+
+
+def normalize_phone(number: str) -> str:
+    digits = re.sub(r"\D", "", str(number or ""))
+    if digits.startswith("00"):
+        digits = digits[2:]
+    if digits.startswith("01") and len(digits) == 11:
+        digits = "880" + digits[1:]
+    return digits
+
+
+def find_user_for_number(number: str):
+    """
+    data/active_numbers.json পড়ে number-এর জন্য user_id ফেরত দেয়।
+    15 মিনিটের বেশি পুরানো assignment ignore করে।
+    Returns: (user_id: int, meta: dict) or (None, None)
+    """
+    try:
+        if not os.path.exists(ACTIVE_NUMBERS_FILE):
+            return None, None
+        with open(ACTIVE_NUMBERS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return None, None
+
+    key = normalize_phone(number)
+    if not key:
+        return None, None
+
+    now = int(time.time())
+    meta = data.get(key)
+    if not meta:
+        return None, None
+
+    # 15 মিনিট expiry check
+    assigned_at = int(meta.get("assigned_at", 0))
+    if now - assigned_at > 15 * 60:
+        return None, None
+
+    try:
+        return int(meta["user_id"]), meta
+    except (KeyError, ValueError, TypeError):
+        return None, None
 
 
 def extract_sesskey(html: str) -> str:
@@ -756,7 +774,9 @@ class ApiPortal:
 # =====================================================
 already_sent: set = load_already_sent()
 _last_save_time: float = time.time()
-message_queue: asyncio.Queue = asyncio.Queue()
+# asyncio.Queue() cannot be created at module level (no event loop yet in Python 3.10+).
+# Initialized inside main() below.
+message_queue: asyncio.Queue | None = None
 
 
 def build_otp_message(portal_name, date, number, service, message, otp):
@@ -792,7 +812,50 @@ async def periodic_save():
         logging.info(f"💾 Saved ({len(already_sent)} entries)")
 
 
+def build_user_otp_message(portal_name, date, number, service, message, otp):
+    """varson3-style message — সরাসরি user-এর কাছে যাবে"""
+    masked = mask_number(number)
+    flag, country_name = get_country_info(number)
+    text = (
+        f"🟢 <b>OTP প্রাপ্ত</b> 🟢\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🌍 <b>{flag} {escape_html(country_name)}</b>\n"
+        f"📡 সার্ভিস: <b>{escape_html(str(service or portal_name))}</b>\n"
+        f"📱 নম্বর: <code>{escape_html(masked)}</code>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🔽 <b>OTP কপি করুন</b> 🔽"
+    )
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            text=f"📋 {otp}",
+            copy_text=CopyTextButton(text=str(otp))
+        )]
+    ])
+    return text, keyboard
+
+
+async def _send_to_user(user_id: int, portal_name: str,
+                        date, number, service, message, otp: str):
+    """varson3 bot token দিয়ে সঠিক user-এ OTP পাঠায়"""
+    from telegram import Bot as _Bot
+    text, keyboard = build_user_otp_message(
+        portal_name, date, number, service, message, otp
+    )
+    try:
+        user_bot = _Bot(token=VARSON3_BOT_TOKEN)
+        await user_bot.send_message(
+            chat_id=user_id,
+            text=text,
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+        logging.info(f"[{portal_name}] ✅ OTP → user {user_id}: {otp}")
+    except Exception as e:
+        logging.error(f"[{portal_name}] ❌ User {user_id} send failed: {e}")
+
+
 async def telegram_sender():
+    global message_queue
     logging.info(f"📨 Telegram sender চালু ({len(BOT_TOKENS)}টি bot, {len(CHAT_IDS)}টি chat).")
     while True:
         try:
@@ -800,6 +863,7 @@ async def telegram_sender():
             portal_name, msg_date, number, service, message, otp = item
             text, keyboard = build_otp_message(portal_name, msg_date, number, service, message, otp)
 
+            # ── ১. Group/Channel-এ পাঠাও ──────────────────────────
             for chat_id in CHAT_IDS:
                 sent = False
                 for attempt in range(3):
@@ -823,6 +887,18 @@ async def telegram_sender():
 
                 await asyncio.sleep(0.3)
 
+            # ── ২. Correct user-এ সরাসরি পাঠাও ──────────────────────
+            loop = asyncio.get_running_loop()
+            user_id, _ = await loop.run_in_executor(
+                None, find_user_for_number, number
+            )
+            if user_id:
+                await _send_to_user(
+                    user_id, portal_name, msg_date, number, service, message, otp
+                )
+            else:
+                logging.info(f"[{portal_name}] ℹ️ No active user for {number} — group only")
+
             message_queue.task_done()
 
         except asyncio.CancelledError:
@@ -833,6 +909,7 @@ async def telegram_sender():
 
 
 async def check_portal(portal):
+    global message_queue
     loop = asyncio.get_running_loop()
     data = await loop.run_in_executor(None, portal.fetch_data)
 
@@ -937,6 +1014,10 @@ async def run_portal(portal):
 
 
 async def main():
+    global message_queue
+    # Queue এখানে create করা হচ্ছে -- event loop চালু আছে এই পয়েন্টে
+    message_queue = asyncio.Queue()
+
     login_portals = [Portal(p) for p in PORTALS]
     api_portals   = [ApiPortal(p) for p in API_PORTALS]
     all_portals   = login_portals + api_portals
