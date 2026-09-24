@@ -6,7 +6,7 @@ import os, re, time, json, logging, threading, requests, random, shutil, html
 from datetime import datetime
 
 # ===================== কনফিগারেশন =====================
-TOKEN = "7908883848:AAE-_Hs8l9QEQoXlEr7eeDpal2acck7DHt4"
+TOKEN = "8455313450:AAFZ0DN6jrJoNZLS1F578m9njXSQUn4qbTE"
 ADMIN_IDS = [2062838711]
 
 os.makedirs("data", exist_ok=True)
