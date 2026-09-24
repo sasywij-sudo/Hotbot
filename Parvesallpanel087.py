@@ -1,4 +1,4 @@
-id                import requests
+ import requests
 import logging
 import json
 import os
@@ -7,9 +7,16 @@ import time
 import tempfile
 import shutil
 from datetime import datetime
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, CopyTextButton
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import TimedOut, RetryAfter, TelegramError
 import asyncio
+
+# CopyTextButton শুধু python-telegram-bot v21+ এ আছে
+try:
+    from telegram import CopyTextButton
+    _COPY_BUTTON_SUPPORTED = True
+except ImportError:
+    _COPY_BUTTON_SUPPORTED = False
 
 os.system('clear')
 
@@ -29,12 +36,12 @@ class ServerDownError(Exception):
 # === MULTI-BOT SYSTEM ===
 # =====================================================
 BOT_TOKENS = [
-    "8687850571:AAHe5l7q0CFgxMVYVeS8AFJnFDkfT2TPkq8",
+"8537567448:AAEO9p3-UauEeU5xBhG7GKUDS16WcNGl-Gs",
 ]
 BOT_TOKENS = [t for t in BOT_TOKENS if t and t.strip()]
 
 CHAT_IDS = [
-    '--1003839684911',
+    '-1003839684911',
 ]
 CHAT_IDS = [c for c in CHAT_IDS if c and c.strip()]
 
@@ -796,12 +803,20 @@ def build_otp_message(portal_name, date, number, service, message, otp):
         f"🕐 <b>TIME:</b> {escape_html(date)}\n\n"
         "━━━━━━━━━━━━━━━━━━━━"
     )
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(
-            text=f"🔑 Copy OTP: {otp}",
-            copy_text=CopyTextButton(text=otp)
-        )]
-    ])
+    if _COPY_BUTTON_SUPPORTED:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton(
+                text=f"🔑 Copy OTP: {otp}",
+                copy_text=CopyTextButton(text=otp)
+            )]
+        ])
+    else:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton(
+                text=f"🔑 OTP: {otp}",
+                callback_data=f"otp_{otp}"
+            )]
+        ])
     return text, keyboard
 
 
@@ -825,12 +840,20 @@ def build_user_otp_message(portal_name, date, number, service, message, otp):
         f"━━━━━━━━━━━━━━━━━━━━━\n"
         f"🔽 <b>OTP কপি করুন</b> 🔽"
     )
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(
-            text=f"📋 {otp}",
-            copy_text=CopyTextButton(text=str(otp))
-        )]
-    ])
+    if _COPY_BUTTON_SUPPORTED:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton(
+                text=f"📋 {otp}",
+                copy_text=CopyTextButton(text=str(otp))
+            )]
+        ])
+    else:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton(
+                text=f"📋 OTP: {otp}",
+                callback_data=f"otp_{otp}"
+            )]
+        ])
     return text, keyboard
 
 
@@ -1052,3 +1075,4 @@ if __name__ == "__main__":
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n⛔ Bot stopped.")
+           
